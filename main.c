@@ -6,38 +6,12 @@
 #include <fcntl.h>
 #include <sys\types.h>
 #include <sys\stat.h>
-
-#define test
+#include <malloc.h>
 
 #define	COMMAND_LENG	100
 #define MAX_PROGRAM_SIZE    0x10000 //적재프로그램의 최대크기의 1/2
 #define SECTION_SIZE	512
 
-unsigned char File_Name[100] = {0,};
-static unsigned char* mem;
-static unsigned char* mem_end;
-static unsigned char* code;
-static unsigned char* data;
-static unsigned char* stack;
-
-enum commandNum  //문자를 문자화 한 장점 활용
-{
-    REGISTDISPLAY = 100,
-    Q,
-    HELP,
-    H,
-    MD_,
-    QUIT,
-    EXITNUM,
-    GO,
-    LOAD,
-    CODE,
-    DATA,
-    STACK,
-    MC, 
-    MM,
-    P 
-};
 
 typedef struct _context
 {
@@ -52,7 +26,31 @@ typedef struct _context
     unsigned int ecx;
     unsigned int eax;
 }Context;
-Context cpuinfo = {0, };
+Context cpuinfo;
+
+void STST(Context *);
+void LDST(Context *);
+unsigned char MD(void *);
+
+enum commandNum  
+{
+    REGISTDISPLAY = 100,
+    Q,
+    HELP,
+    H,
+    MD_,
+    QUIT,
+    GO,
+    LOAD,
+    CODE,
+    DATA,
+    STACK,
+    MC, 
+    MM,
+    P,
+    EXITNUM
+};
+
 
 typedef struct _commandmap
 {
@@ -60,9 +58,6 @@ typedef struct _commandmap
     int (*CmdFp)(void *,int);
     enum commandNum cmdNum;
 }CommandMap;
-void STST(Context *);
-unsigned char MD(void *);
-void LDST(Context *);
 
 int RegistDisplay(void *, int);
 int MemoryDisplay(void *, int);
@@ -72,22 +67,24 @@ int Go(void *, int);
 int Code(void *, int);
 int Data(void *, int);
 int Stack(void *, int);
-void hexaview(unsigned char *ucp, int iLoop);
 int Clear_mem(void *vNotuse,int iNotuse);
 int Memory_Modify(void *ucp, int iNotuse);
 int Memory_Status(void *vNotuse,int iNotuse);
 
-void init(void);
+void hexaview(unsigned char *ucp, int iLoop);
 int Load(void *, int);
 void Init_Mem(void);
 
 
+static unsigned char* mem;
+static unsigned char* mem_end;
+static unsigned char* code;
+static unsigned char* data;
+static unsigned char* stack;
+unsigned char File_Name[30] = {0,};
+
 int main()
 {
-    unsigned char *md_ucp = 0;
-    int iLeng;
-    char command[COMMAND_LENG];
-    void *vp = 0;
     CommandMap *pMap = 0; 
     CommandMap cMap[] = {
 	{"R\n",		RegistDisplay,	REGISTDISPLAY	},
@@ -107,17 +104,21 @@ int main()
 	{"P\n",	        Memory_Status,	P		},
 	{0,		0,		EXITNUM		},
     }; 
-
+    unsigned char *md_ucp = 0;
+    int iLeng = 0;
+    char command[COMMAND_LENG] = {0,};
+    void *vp = 0;
     mem = (unsigned char *)malloc(MAX_PROGRAM_SIZE * 2); //128k
     mem_end = mem + (MAX_PROGRAM_SIZE * 2);		
+
     if(mem == 0)
     {
 	printf("메모리가 부족합니다\n");
 	return 0;
     }
     Init_Mem();
-    STST(&cpuinfo); //시작시 cpu정보 읽기 
-    RegistDisplay(&cpuinfo,0);
+    STST(&cpuinfo);
+    RegistDisplay(&cpuinfo, 0);
 
     while(1)
     {	    
@@ -129,7 +130,7 @@ int main()
 
 	if((pMap != 0) && (0 == strcmp(command, "\n")))
 	{
-	    if(pMap -> cmdNum == 109)
+	    if(pMap -> cmdNum == CODE)
 	    {
 		code = code + 256;
 		if(code >= mem_end)
@@ -141,7 +142,7 @@ int main()
 		    Code(vp, iLeng);
 		}
 	    }
-	    else if(pMap -> cmdNum == 110)
+	    else if(pMap -> cmdNum == DATA)
 	    {
 		data = data + 256;
 		if(data >= mem_end)
@@ -153,10 +154,10 @@ int main()
 		    Data(vp, iLeng);
 		}
 	    }
-	    else if(pMap -> cmdNum == 111)
+	    else if(pMap -> cmdNum == STACK)
 	    {
 		stack = stack - 256;
-		if(md_ucp <= code)
+		if(stack <= code)
 		{
 		    pMap = 0;
 		}
@@ -165,19 +166,7 @@ int main()
 		    Stack(vp, iLeng);
 		}
 	    }
-	    else if(pMap -> cmdNum == 104)
-	    {
-		md_ucp = md_ucp + 256;
-		if(md_ucp >= mem_end)
-		{
-		    pMap = 0;
-		}
-		else
-		{
-		    MemoryDisplay((void *)md_ucp, iLeng);
-		}
-	    }
-	    else if(pMap -> cmdNum == 113)
+	    else if((pMap -> cmdNum == MD_) || (pMap -> cmdNum == MM))
 	    {
 		md_ucp = md_ucp + 256;
 		if(md_ucp >= mem_end)
@@ -219,15 +208,16 @@ int main()
 		system("cls");
 		printf("\n\n\n   * 원하는 곳의 주소를 16진수로 입력하세요? ");
 		scanf_s("%x", (int *)&md_ucp); 
-		vp = (void *)md_ucp;
+		vp = md_ucp;
 
-		if((mem_end < md_ucp) || mem > md_ucp)
+		if((mem >=md_ucp) || (mem_end <= md_ucp))
 		{
 		    system("cls");
-		    printf("\n\n\n     출력할 수 없는 공간입니다.\n");
 		    pMap = 0;
+		    printf("\n\n\n     출력할 수 없는 공간입니다.\n");
 		    getch();
-    		    RegistDisplay(&cpuinfo,0);
+
+    		    RegistDisplay(&cpuinfo, 0);
 		    continue;
 		}
 	    }
@@ -236,15 +226,10 @@ int main()
 	    {
 		Init_Mem();
 	    }
-
-	
-	    printf("	EAX : 0x%08X", cpuinfo.eax);
-	    printf("	EAX : 0x%08X", cpuinfo.ebx);
-	    printf("	xxx : 0x%08X", ((Context *)vp));
+	    printf("vp : %x\n", vp);
 	    getch();
 	    fflush(stdin);
-
-	    (*(pMap->CmdFp))(vp, iLeng);
+	    (*(pMap->CmdFp))(&vp, iLeng);
 	}
 	else if((0 == pMap->cmd_command) && (command[0] != '\n'))
 	{
@@ -255,8 +240,10 @@ int main()
 }
 
 
+
 int Memory_Modify(void *ucp, int iNotuse) 
 {	
+    printf("%x\n", ucp);
     hexaview((unsigned char *)ucp, 15);
     printf("    * 변경하고 싶은 16진수를 입력하세요? ");
     scanf_s("%02x", (unsigned char *)ucp);
@@ -273,26 +260,6 @@ void Init_Mem(void)
 }
 
 
-int Go(void *vNotuse,int iNotuse)   // stack삽입, code삽입, cpu정보 초기값 삽입하여 초기화면으로 Go
-{
-   
-    Context cputemp;
-    memset(&cputemp, 0, sizeof(Context));
-    
-    cputemp.eax = (unsigned int)&cpuinfo; //주소값 
-    cputemp.eip = (unsigned int)code;     //코드 
-    cputemp.esp = (unsigned int)mem_end - 1; //스택
-    system("cls");
-    printf("\n\n\n       프로그램이 실행되었습니다.\n");
-    getch();
-    LDST(&cputemp);		
-
-
-    printf("Kernel Panic\n");
-    return 0;
-}
-
-
 int Code(void *vNotuse,int iNotuse)
 {
     hexaview(code, 15);
@@ -302,7 +269,6 @@ int Code(void *vNotuse,int iNotuse)
 
 int Data(void *vNotuse,int iNotuse)
 {
-
     hexaview(data, 15);
     return 0;
 }
@@ -320,6 +286,7 @@ int Load(void *vNotuse,int iNotus)
     int Read_Num;
     int	Header_Size;
     int File_DS = 0;
+
     IMAGE_DOS_HEADER	    *dhp;  
     IMAGE_NT_HEADERS	    *php;   
     IMAGE_FILE_HEADER	    *fhp;
@@ -389,7 +356,6 @@ int Load(void *vNotuse,int iNotus)
 	system("cls");
 	printf("\n\n\n	      파일을 성공적으로 메모리에 적재하였습니다.\n\n\n\n\n\n\n\n\n");
     }
-
     getch();
     return 0;
 }
@@ -399,7 +365,7 @@ int MemoryDisplay(void *ucp, int iNotuse)
 {
     *(unsigned char *)ucp = MD((unsigned char *)ucp); 
     hexaview((unsigned char *)ucp, 15);
-    return MD((unsigned char *)ucp); 
+    return 0;
 }
 
 
@@ -412,9 +378,38 @@ int Clear_mem(void *vNotuse,int iNotuse)
 
 int Quit(void *vNotuse,int iNotuse)
 {
-    memset(mem, 0, MAX_PROGRAM_SIZE * 2); 
     free(mem);
     exit(0);
+    return 0;
+}
+
+
+int Go(void *vNotuse, int iNotuse)   // stack삽입, code삽입, cpu정보 초기값 삽입하여 초기화면으로 Go
+{
+    Context cputemp = {0, };
+    memset(&cputemp, 0, sizeof(Context));
+
+    if(File_Name[0] == 0)
+    {
+	printf("\n\n\n      Load 하지 않았습니다.\n");
+	getch();
+	return 0;
+    }
+    else
+    {
+	File_Name[0] = 0;
+    }
+    cputemp.eax = (unsigned int)&cpuinfo; //주소값 
+    cputemp.eip = (unsigned int)code;     //코드 
+    cputemp.esp = (unsigned int)mem_end - 1; //스택
+    system("cls");
+    printf("\n\n\n       프로그램이 실행되었습니다.\n");
+    getch();
+
+    //RegistDisplay(&cpuinfo,0);
+    LDST(&cputemp);		
+    printf("Kernel Panic\n");
+    getch();
     return 0;
 }
 
@@ -423,7 +418,7 @@ void hexaview(unsigned char *ucp, int iLoop)
 {
     int iCnt=0;
     int iLoopcnt;
-
+    printf("ucp = %x\n", ucp); 
     printf("\n\n  -------------------------------------------------------------------------- \n"
 	    "   Address ");
 
@@ -438,17 +433,15 @@ void hexaview(unsigned char *ucp, int iLoop)
 	printf("  %08X ", ucp);
 	for(iCnt = 0; iCnt < 16; ++iCnt)
 	{
+
 	    if((mem >= ucp + iCnt) || (mem_end <= ucp+iCnt))
 	    {
-		printf("\n      범위를 초과하였습니다\n");
+		printf("\n      범위를 초과하였습니다. mem: %x   mem_end: %x  ucp+icnt = %x\n", mem, mem_end, ucp+iCnt);
 		getch();
-		STST(&cpuinfo); //시작시 cpu정보 읽기 
-		RegistDisplay(&cpuinfo,0);
 		return;
 	    }
 	    printf("%02X ", *(ucp + iCnt)); 
 	}
-
 	putchar(' ');
 
 	for(iCnt = 0; iCnt < 16; ++iCnt)
@@ -476,11 +469,6 @@ void hexaview(unsigned char *ucp, int iLoop)
 
 int RegistDisplay(void *r, int notuse)
 {
-	    printf("\n	EAX : 0x%08X", cpuinfo.ebx);
-	    printf("	xxx : 0x%08X", ((Context *)r));
-	    getch();
-	    fflush(stdin);
-
     system("cls");
     printf("\n\n");
     printf("	* code  address          :  0x%08x\n", (unsigned int)code);
