@@ -7,6 +7,8 @@
 #include <sys\types.h>
 #include <sys\stat.h>
 
+#define test
+
 #define	COMMAND_LENG	100
 #define MAX_PROGRAM_SIZE    0x10000 //적재프로그램의 최대크기의 1/2
 #define SECTION_SIZE	512
